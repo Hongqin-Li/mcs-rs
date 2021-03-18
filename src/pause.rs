@@ -3,7 +3,7 @@
 
 #[cfg(all(feature = "unstable", any(target_arch = "x86", target_arch = "x86_64")))]
 pub fn pause() {
-    unsafe { asm!("pause" :::: "volatile"); }
+    unsafe { asm!("pause"); }
 }
 
 #[cfg(any(not(feature = "unstable"), not(any(target_arch = "x86", target_arch = "x86_64"))))]
