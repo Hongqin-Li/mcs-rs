@@ -1,12 +1,12 @@
 use core::cell::UnsafeCell;
 use core::ops::{Deref, DerefMut};
 use core::ptr;
-use core::sync::atomic::{AtomicBool, AtomicPtr, Ordering, fence};
+use core::sync::atomic::{fence, AtomicBool, AtomicPtr, Ordering};
 
 use pause::pause;
 
 pub struct Slot {
-    next: AtomicPtr<AtomicBool>
+    next: AtomicPtr<AtomicBool>,
 }
 
 /// An RAII implementation of a "scoped lock" of a mutex. When this structure is
@@ -17,7 +17,7 @@ pub struct Slot {
 #[must_use]
 pub struct Guard<'a, T: ?Sized + 'a> {
     lock: &'a Mutex<T>,
-    slot: &'a Slot
+    slot: &'a Slot,
 }
 
 /// A mutual exclusion primitive useful for protecting shared data
@@ -71,24 +71,24 @@ pub struct Guard<'a, T: ?Sized + 'a> {
 /// ```
 pub struct Mutex<T: ?Sized> {
     queue: AtomicPtr<Slot>,
-    data: UnsafeCell<T>
+    data: UnsafeCell<T>,
 }
 
-unsafe impl<T: Send> Sync for Mutex<T> { }
-unsafe impl<T: Send> Send for Mutex<T> { }
+unsafe impl<T: Send> Sync for Mutex<T> {}
+unsafe impl<T: Send> Send for Mutex<T> {}
 
 impl Slot {
     #[cfg(feature = "unstable")]
     pub const fn new() -> Slot {
         Slot {
-            next: AtomicPtr::new(ptr::null_mut())
+            next: AtomicPtr::new(ptr::null_mut()),
         }
     }
 
     #[cfg(not(feature = "unstable"))]
     pub fn new() -> Slot {
         Slot {
-            next: AtomicPtr::new(ptr::null_mut())
+            next: AtomicPtr::new(ptr::null_mut()),
         }
     }
 }
@@ -99,7 +99,7 @@ impl<T> Mutex<T> {
     pub const fn new(value: T) -> Mutex<T> {
         Mutex {
             queue: AtomicPtr::new(ptr::null_mut()),
-            data: UnsafeCell::new(value)
+            data: UnsafeCell::new(value),
         }
     }
 
@@ -108,15 +108,13 @@ impl<T> Mutex<T> {
     pub fn new(value: T) -> Mutex<T> {
         Mutex {
             queue: AtomicPtr::new(ptr::null_mut()),
-            data: UnsafeCell::new(value)
+            data: UnsafeCell::new(value),
         }
     }
 
     /// Consumes this mutex, returning the underlying data.
     pub fn into_inner(self) -> T {
-        unsafe {
-            self.data.into_inner()
-        }
+        unsafe { self.data.into_inner() }
     }
 }
 
@@ -131,10 +129,14 @@ impl<T: ?Sized> Mutex<T> {
     pub fn try_lock<'a>(&'a self, slot: &'a mut Slot) -> Result<Guard<'a, T>, ()> {
         slot.next = AtomicPtr::new(ptr::null_mut());
 
-        if self.queue.compare_and_swap(ptr::null_mut(), slot, Ordering::AcqRel).is_null() {
+        if self
+            .queue
+            .compare_and_swap(ptr::null_mut(), slot, Ordering::AcqRel)
+            .is_null()
+        {
             Ok(Guard {
                 lock: self,
-                slot: slot
+                slot: slot,
             })
         } else {
             Err(())
@@ -153,7 +155,8 @@ impl<T: ?Sized> Mutex<T> {
         if !pred.is_null() {
             let pred = unsafe { &*pred };
             let locked = AtomicBool::new(true);
-            pred.next.store(&locked as *const _ as *mut _, Ordering::Release);
+            pred.next
+                .store(&locked as *const _ as *mut _, Ordering::Release);
             while locked.load(Ordering::Relaxed) {
                 pause();
             }
@@ -162,7 +165,7 @@ impl<T: ?Sized> Mutex<T> {
 
         Guard {
             lock: self,
-            slot: slot
+            slot: slot,
         }
     }
 
@@ -195,7 +198,17 @@ unsafe impl<'a, #[may_dangle] T: ?Sized> Drop for Guard<'a, T> {
         let mut succ = self.slot.next.load(Ordering::Relaxed);
         if succ.is_null() {
             // No one has registered as waiting.
-            if self.lock.queue.compare_exchange(self.slot as *const _ as *mut _, ptr::null_mut(), Ordering::Release, Ordering::Relaxed).is_ok() {
+            if self
+                .lock
+                .queue
+                .compare_exchange(
+                    self.slot as *const _ as *mut _,
+                    ptr::null_mut(),
+                    Ordering::Release,
+                    Ordering::Relaxed,
+                )
+                .is_ok()
+            {
                 // No one was waiting.
                 return;
             }
@@ -223,7 +236,17 @@ impl<'a, T: ?Sized> Drop for Guard<'a, T> {
         let mut succ = self.slot.next.load(Ordering::Relaxed);
         if succ.is_null() {
             // No one has registered as waiting.
-            if self.lock.queue.compare_exchange(self.slot as *const _ as *mut _, ptr::null_mut(), Ordering::Release, Ordering::Relaxed).is_ok() {
+            if self
+                .lock
+                .queue
+                .compare_exchange(
+                    self.slot as *const _ as *mut _,
+                    ptr::null_mut(),
+                    Ordering::Release,
+                    Ordering::Relaxed,
+                )
+                .is_ok()
+            {
                 // No one was waiting.
                 return;
             }
@@ -260,9 +283,9 @@ mod test {
     // option. This file may not be copied, modified, or distributed
     // except according to those terms.
 
-    use std::sync::Arc;
-    use std::sync::mpsc::channel;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::mpsc::channel;
+    use std::sync::Arc;
     use std::thread;
 
     #[derive(Eq, PartialEq, Debug)]
@@ -296,9 +319,15 @@ mod test {
         let (tx, rx) = channel();
         for _ in 0..CONCURRENCY {
             let tx2 = tx.clone();
-            thread::spawn(move|| { inc(); tx2.send(()).unwrap(); });
+            thread::spawn(move || {
+                inc();
+                tx2.send(()).unwrap();
+            });
             let tx2 = tx.clone();
-            thread::spawn(move|| { inc(); tx2.send(()).unwrap(); });
+            thread::spawn(move || {
+                inc();
+                tx2.send(()).unwrap();
+            });
         }
 
         drop(tx);
@@ -354,7 +383,7 @@ mod test {
         let arc = Arc::new(Mutex::new(1));
         let arc2 = Arc::new(Mutex::new(arc));
         let (tx, rx) = channel();
-        let _t = thread::spawn(move|| {
+        let _t = thread::spawn(move || {
             let mut slot1 = Slot::new();
             let mut slot2 = Slot::new();
 
@@ -370,7 +399,7 @@ mod test {
     fn test_lock_arc_access_in_unwind() {
         let arc = Arc::new(Mutex::new(1));
         let arc2 = arc.clone();
-        let _ = thread::spawn(move|| -> () {
+        let _ = thread::spawn(move || -> () {
             struct Unwinder {
                 i: Arc<Mutex<i32>>,
             }
@@ -382,7 +411,8 @@ mod test {
             }
             let _u = Unwinder { i: arc2 };
             panic!();
-        }).join();
+        })
+        .join();
         let mut slot = Slot::new();
         let lock = arc.lock(&mut slot);
         assert_eq!(*lock, 2);
